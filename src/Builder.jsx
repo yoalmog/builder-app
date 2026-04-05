@@ -43,7 +43,7 @@ function DropZone({ id, children }) {
     <div
       ref={setNodeRef}
       style={{
-        minHeight: 50,
+        minHeight: 80,
         background: isOver ? "#e0f2ff" : "transparent"
       }}
     >
@@ -55,14 +55,32 @@ function DropZone({ id, children }) {
 export default function Builder() {
   const [tree, setTree] = useState([]);
 
+  // Add section
   const addSection = () => {
     setTree([...tree, createElement("section")]);
   };
 
-  const addText = (parentId) => {
+  // Add columns to section
+  const addColumns = (sectionId, count) => {
     const update = (nodes) =>
       nodes.map((n) => {
-        if (n.id === parentId) {
+        if (n.id === sectionId) {
+          const columns = Array.from({ length: count }).map(() => ({
+            ...createElement("column")
+          }));
+          return { ...n, children: columns };
+        }
+        return { ...n, children: update(n.children || []) };
+      });
+
+    setTree(update(tree));
+  };
+
+  // Add text to column
+  const addText = (columnId) => {
+    const update = (nodes) =>
+      nodes.map((n) => {
+        if (n.id === columnId) {
           return {
             ...n,
             children: [...n.children, createElement("text")]
@@ -106,20 +124,41 @@ export default function Builder() {
     setTree(insert(remove(tree)));
   };
 
+  // Render
   const renderElement = (el) => {
     if (el.type === "section") {
       return (
-        <DropZone key={el.id} id={el.id}>
-          <div style={{ border: "1px dashed gray", padding: 20 }}>
-            <button onClick={() => addText(el.id)}>+ Text</button>
+        <div key={el.id} style={{ border: "2px solid #aaa", marginBottom: 20 }}>
+          
+          {/* Section controls */}
+          <div style={{ padding: 10 }}>
+            <button onClick={() => addColumns(el.id, 2)}>2 Columns</button>
+            <button onClick={() => addColumns(el.id, 3)}>3 Columns</button>
+          </div>
 
-            {el.children.map((child) => (
-              <Draggable key={child.id} id={child.id}>
-                {renderElement(child)}
-              </Draggable>
+          {/* Columns */}
+          <div style={{ display: "flex", gap: 10, padding: 10 }}>
+            {el.children.map((col) => (
+              <DropZone key={col.id} id={col.id}>
+                <div
+                  style={{
+                    flex: 1,
+                    border: "1px dashed gray",
+                    padding: 10
+                  }}
+                >
+                  <button onClick={() => addText(col.id)}>+ Text</button>
+
+                  {col.children.map((child) => (
+                    <Draggable key={child.id} id={child.id}>
+                      {renderElement(child)}
+                    </Draggable>
+                  ))}
+                </div>
+              </DropZone>
             ))}
           </div>
-        </DropZone>
+        </div>
       );
     }
 
