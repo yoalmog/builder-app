@@ -6,15 +6,21 @@ import {
   closestCenter
 } from "@dnd-kit/core";
 
-// Create element
+// ---------- ELEMENT FACTORY ----------
 const createElement = (type) => ({
   id: Date.now() + Math.random(),
   type,
-  content: "Edit me",
+  content: type === "button" ? "Click me" : "Edit me",
+  src: "https://via.placeholder.com/150",
+  style: {
+    padding: 10,
+    background: "#fff",
+    color: "#000"
+  },
   children: []
 });
 
-// Draggable
+// ---------- DRAG ----------
 function Draggable({ id, children }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id });
 
@@ -35,7 +41,7 @@ function Draggable({ id, children }) {
   );
 }
 
-// Drop zone
+// ---------- DROP ----------
 function DropZone({ id, children }) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -44,7 +50,8 @@ function DropZone({ id, children }) {
       ref={setNodeRef}
       style={{
         minHeight: 80,
-        background: isOver ? "#e0f2ff" : "transparent"
+        borderTop: isOver ? "3px solid blue" : "none",
+        borderBottom: isOver ? "3px solid blue" : "none"
       }}
     >
       {children}
@@ -54,36 +61,23 @@ function DropZone({ id, children }) {
 
 export default function Builder() {
   const [tree, setTree] = useState([]);
+  const [selected, setSelected] = useState(null);
 
-  // Add section
+  // ---------- ADD ----------
   const addSection = () => {
     setTree([...tree, createElement("section")]);
   };
 
-  // Add columns to section
   const addColumns = (sectionId, count) => {
     const update = (nodes) =>
       nodes.map((n) => {
         if (n.id === sectionId) {
-          const columns = Array.from({ length: count }).map(() => ({
-            ...createElement("column")
-          }));
-          return { ...n, children: columns };
-        }
-        return { ...n, children: update(n.children || []) };
-      });
-
-    setTree(update(tree));
-  };
-
-  // Add text to column
-  const addText = (columnId) => {
-    const update = (nodes) =>
-      nodes.map((n) => {
-        if (n.id === columnId) {
           return {
             ...n,
-            children: [...n.children, createElement("text")]
+            children: Array.from({ length: count }).map(() => ({
+              ...createElement("column"),
+              width: 100 / count
+            }))
           };
         }
         return { ...n, children: update(n.children || []) };
@@ -92,9 +86,23 @@ export default function Builder() {
     setTree(update(tree));
   };
 
-  // Drag logic
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
+  const addElement = (columnId, type) => {
+    const update = (nodes) =>
+      nodes.map((n) => {
+        if (n.id === columnId) {
+          return {
+            ...n,
+            children: [...n.children, createElement(type)]
+          };
+        }
+        return { ...n, children: update(n.children || []) };
+      });
+
+    setTree(update(tree));
+  };
+
+  // ---------- DRAG ----------
+  const handleDragEnd = ({ active, over }) => {
     if (!over) return;
 
     let dragged;
@@ -124,34 +132,57 @@ export default function Builder() {
     setTree(insert(remove(tree)));
   };
 
-  // Render
+  // ---------- STYLE PANEL ----------
+  const updateStyle = (key, value) => {
+    const update = (nodes) =>
+      nodes.map((n) => {
+        if (n.id === selected?.id) {
+          return {
+            ...n,
+            style: { ...n.style, [key]: value }
+          };
+        }
+        return { ...n, children: update(n.children || []) };
+      });
+
+    setTree(update(tree));
+  };
+
+  // ---------- RENDER ----------
   const renderElement = (el) => {
     if (el.type === "section") {
       return (
         <div key={el.id} style={{ border: "2px solid #aaa", marginBottom: 20 }}>
-          
-          {/* Section controls */}
           <div style={{ padding: 10 }}>
-            <button onClick={() => addColumns(el.id, 2)}>2 Columns</button>
-            <button onClick={() => addColumns(el.id, 3)}>3 Columns</button>
+            <button onClick={() => addColumns(el.id, 2)}>2 Col</button>
+            <button onClick={() => addColumns(el.id, 3)}>3 Col</button>
           </div>
 
-          {/* Columns */}
-          <div style={{ display: "flex", gap: 10, padding: 10 }}>
+          <div style={{ display: "flex", gap: 10 }}>
             {el.children.map((col) => (
               <DropZone key={col.id} id={col.id}>
                 <div
                   style={{
-                    flex: 1,
+                    flex: col.width,
                     border: "1px dashed gray",
                     padding: 10
                   }}
                 >
-                  <button onClick={() => addText(col.id)}>+ Text</button>
+                  <button onClick={() => addElement(col.id, "text")}>
+                    Text
+                  </button>
+                  <button onClick={() => addElement(col.id, "image")}>
+                    Image
+                  </button>
+                  <button onClick={() => addElement(col.id, "button")}>
+                    Button
+                  </button>
 
                   {col.children.map((child) => (
                     <Draggable key={child.id} id={child.id}>
-                      {renderElement(child)}
+                      <div onClick={() => setSelected(child)}>
+                        {renderElement(child)}
+                      </div>
                     </Draggable>
                   ))}
                 </div>
@@ -164,19 +195,18 @@ export default function Builder() {
 
     if (el.type === "text") {
       return (
-        <div
-          key={el.id}
-          contentEditable
-          suppressContentEditableWarning
-          style={{
-            padding: 10,
-            border: "1px solid #ddd",
-            marginTop: 5
-          }}
-        >
+        <div contentEditable style={el.style}>
           {el.content}
         </div>
       );
+    }
+
+    if (el.type === "image") {
+      return <img src={el.src} style={{ width: "100%" }} />;
+    }
+
+    if (el.type === "button") {
+      return <button style={el.style}>{el.content}</button>;
     }
   };
 
@@ -184,14 +214,31 @@ export default function Builder() {
     <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div style={{ display: "flex", height: "100%" }}>
         
-        {/* Sidebar */}
-        <div style={{ width: 200, borderRight: "1px solid #ccc", padding: 10 }}>
+        {/* LEFT */}
+        <div style={{ width: 200, borderRight: "1px solid #ccc" }}>
           <button onClick={addSection}>Add Section</button>
         </div>
 
-        {/* Canvas */}
+        {/* CANVAS */}
         <div style={{ flex: 1, padding: 20 }}>
           {tree.map(renderElement)}
+        </div>
+
+        {/* RIGHT STYLE PANEL */}
+        <div style={{ width: 250, borderLeft: "1px solid #ccc", padding: 10 }}>
+          <h4>Style</h4>
+          <input
+            placeholder="Padding"
+            onChange={(e) => updateStyle("padding", e.target.value)}
+          />
+          <input
+            placeholder="Background"
+            onChange={(e) => updateStyle("background", e.target.value)}
+          />
+          <input
+            placeholder="Color"
+            onChange={(e) => updateStyle("color", e.target.value)}
+          />
         </div>
 
       </div>
