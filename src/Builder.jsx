@@ -14,7 +14,7 @@ const createElement = (type) => ({
   children: []
 });
 
-// Draggable wrapper
+// Draggable
 function Draggable({ id, children }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id });
 
@@ -26,7 +26,8 @@ function Draggable({ id, children }) {
       style={{
         transform: transform
           ? `translate(${transform.x}px, ${transform.y}px)`
-          : undefined
+          : undefined,
+        cursor: "grab"
       }}
     >
       {children}
@@ -73,7 +74,7 @@ export default function Builder() {
     setTree(update(tree));
   };
 
-  // DRAG END LOGIC
+  // Drag logic
   const handleDragEnd = (event) => {
     const { active, over } = event;
     if (!over) return;
@@ -102,11 +103,9 @@ export default function Builder() {
         return { ...n, children: insert(n.children || []) };
       });
 
-    const newTree = insert(remove(tree));
-    setTree(newTree);
+    setTree(insert(remove(tree)));
   };
 
-  // RENDER
   const renderElement = (el) => {
     if (el.type === "section") {
       return (
@@ -133,8 +132,7 @@ export default function Builder() {
           style={{
             padding: 10,
             border: "1px solid #ddd",
-            marginTop: 5,
-            cursor: "grab"
+            marginTop: 5
           }}
         >
           {el.content}
