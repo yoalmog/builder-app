@@ -6,7 +6,7 @@ import {
   closestCenter
 } from "@dnd-kit/core";
 
-// ---------- ELEMENT FACTORY ----------
+// ---------- ELEMENT ----------
 const createElement = (type) => ({
   id: Date.now() + Math.random(),
   type,
@@ -62,6 +62,23 @@ function DropZone({ id, children }) {
 export default function Builder() {
   const [tree, setTree] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [device, setDevice] = useState("desktop");
+
+  // ---------- RESIZE ----------
+  const resizeColumns = (sectionId, colIndex, newWidth) => {
+    const update = (nodes) =>
+      nodes.map((n) => {
+        if (n.id === sectionId) {
+          const cols = [...n.children];
+          cols[colIndex].width = Math.max(10, Math.min(90, newWidth));
+          cols[colIndex + 1].width = 100 - cols[colIndex].width;
+          return { ...n, children: cols };
+        }
+        return { ...n, children: update(n.children || []) };
+      });
+
+    setTree(update(tree));
+  };
 
   // ---------- ADD ----------
   const addSection = () => {
@@ -132,7 +149,7 @@ export default function Builder() {
     setTree(insert(remove(tree)));
   };
 
-  // ---------- STYLE PANEL ----------
+  // ---------- STYLE ----------
   const updateStyle = (key, value) => {
     const update = (nodes) =>
       nodes.map((n) => {
@@ -153,40 +170,68 @@ export default function Builder() {
     if (el.type === "section") {
       return (
         <div key={el.id} style={{ border: "2px solid #aaa", marginBottom: 20 }}>
+          
           <div style={{ padding: 10 }}>
             <button onClick={() => addColumns(el.id, 2)}>2 Col</button>
             <button onClick={() => addColumns(el.id, 3)}>3 Col</button>
           </div>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            {el.children.map((col) => (
-              <DropZone key={col.id} id={col.id}>
-                <div
-                  style={{
-                    flex: col.width,
-                    border: "1px dashed gray",
-                    padding: 10
-                  }}
-                >
-                  <button onClick={() => addElement(col.id, "text")}>
-                    Text
-                  </button>
-                  <button onClick={() => addElement(col.id, "image")}>
-                    Image
-                  </button>
-                  <button onClick={() => addElement(col.id, "button")}>
-                    Button
-                  </button>
+          <div style={{ display: "flex", alignItems: "stretch" }}>
+            {el.children.map((col, i) => (
+              <React.Fragment key={col.id}>
+                
+                <DropZone id={col.id}>
+                  <div
+                    style={{
+                      flex: col.width,
+                      border: "1px dashed gray",
+                      padding: 10
+                    }}
+                  >
+                    <button onClick={() => addElement(col.id, "text")}>Text</button>
+                    <button onClick={() => addElement(col.id, "image")}>Image</button>
+                    <button onClick={() => addElement(col.id, "button")}>Button</button>
 
-                  {col.children.map((child) => (
-                    <Draggable key={child.id} id={child.id}>
-                      <div onClick={() => setSelected(child)}>
-                        {renderElement(child)}
-                      </div>
-                    </Draggable>
-                  ))}
-                </div>
-              </DropZone>
+                    {col.children.map((child) => (
+                      <Draggable key={child.id} id={child.id}>
+                        <div onClick={() => setSelected(child)}>
+                          {renderElement(child)}
+                        </div>
+                      </Draggable>
+                    ))}
+                  </div>
+                </DropZone>
+
+                {/* RESIZE HANDLE */}
+                {i < el.children.length - 1 && (
+                  <div
+                    style={{
+                      width: 6,
+                      cursor: "col-resize",
+                      background: "#ccc"
+                    }}
+                    onMouseDown={(e) => {
+                      const startX = e.clientX;
+
+                      const onMove = (moveEvent) => {
+                        const diff = moveEvent.clientX - startX;
+                        const newWidth = col.width + diff * 0.2;
+                        resizeColumns(el.id, i, newWidth);
+                      };
+
+                      document.addEventListener("mousemove", onMove);
+                      document.addEventListener(
+                        "mouseup",
+                        () => {
+                          document.removeEventListener("mousemove", onMove);
+                        },
+                        { once: true }
+                      );
+                    }}
+                  />
+                )}
+
+              </React.Fragment>
             ))}
           </div>
         </div>
@@ -213,18 +258,44 @@ export default function Builder() {
   return (
     <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div style={{ display: "flex", height: "100%" }}>
-        
-        {/* LEFT */}
-        <div style={{ width: 200, borderRight: "1px solid #ccc" }}>
+
+        {/* LEFT PANEL */}
+        <div style={{ width: 200, borderRight: "1px solid #ccc", padding: 10 }}>
           <button onClick={addSection}>Add Section</button>
+
+          <div style={{ marginTop: 20 }}>
+            <button onClick={() => setDevice("desktop")}>Desktop</button>
+            <button onClick={() => setDevice("tablet")}>Tablet</button>
+            <button onClick={() => setDevice("mobile")}>Mobile</button>
+          </div>
         </div>
 
         {/* CANVAS */}
-        <div style={{ flex: 1, padding: 20 }}>
-          {tree.map(renderElement)}
+        <div
+          style={{
+            flex: 1,
+            padding: 20,
+            display: "flex",
+            justifyContent: "center"
+          }}
+        >
+          <div
+            style={{
+              width:
+                device === "mobile"
+                  ? 375
+                  : device === "tablet"
+                  ? 768
+                  : "100%",
+              border: "1px solid #ccc",
+              padding: 10
+            }}
+          >
+            {tree.map(renderElement)}
+          </div>
         </div>
 
-        {/* RIGHT STYLE PANEL */}
+        {/* STYLE PANEL */}
         <div style={{ width: 250, borderLeft: "1px solid #ccc", padding: 10 }}>
           <h4>Style</h4>
           <input
@@ -244,4 +315,4 @@ export default function Builder() {
       </div>
     </DndContext>
   );
-}
+        }
