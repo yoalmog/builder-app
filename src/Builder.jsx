@@ -6,6 +6,9 @@ import {
   closestCenter
 } from "@dnd-kit/core";
 
+import { db } from "./firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+
 // ---------- ELEMENT ----------
 const createElement = (type) => ({
   id: Date.now() + Math.random(),
@@ -50,8 +53,7 @@ function DropZone({ id, children }) {
       ref={setNodeRef}
       style={{
         minHeight: 80,
-        borderTop: isOver ? "3px solid blue" : "none",
-        borderBottom: isOver ? "3px solid blue" : "none"
+        borderTop: isOver ? "3px solid blue" : "none"
       }}
     >
       {children}
@@ -59,25 +61,32 @@ function DropZone({ id, children }) {
   );
 }
 
-export default function Builder() {
+export default function Builder({ user }) {
   const [tree, setTree] = useState([]);
   const [selected, setSelected] = useState(null);
   const [device, setDevice] = useState("desktop");
+  const [pageId, setPageId] = useState("home");
 
-  // ---------- RESIZE ----------
-  const resizeColumns = (sectionId, colIndex, newWidth) => {
-    const update = (nodes) =>
-      nodes.map((n) => {
-        if (n.id === sectionId) {
-          const cols = [...n.children];
-          cols[colIndex].width = Math.max(10, Math.min(90, newWidth));
-          cols[colIndex + 1].width = 100 - cols[colIndex].width;
-          return { ...n, children: cols };
-        }
-        return { ...n, children: update(n.children || []) };
-      });
+  // ---------- SAVE ----------
+  const savePage = async () => {
+    if (!user) return;
 
-    setTree(update(tree));
+    await setDoc(doc(db, "pages", user.uid + "_" + pageId), {
+      tree
+    });
+
+    alert("Saved!");
+  };
+
+  // ---------- LOAD ----------
+  const loadPage = async () => {
+    if (!user) return;
+
+    const snap = await getDoc(doc(db, "pages", user.uid + "_" + pageId));
+
+    if (snap.exists()) {
+      setTree(snap.data().tree);
+    }
   };
 
   // ---------- ADD ----------
@@ -103,6 +112,126 @@ export default function Builder() {
     setTree(update(tree));
   };
 
+  const addElement = (columnId, type) => {
+    const update = (nodes) =>
+      nodes.map((n) => {
+        if (n.id === columnId) {
+          return {
+            ...n,
+            children: [...n.children, createElement(type)]
+          };
+        }
+        return { ...n, children: update(n.children || []) };
+      });
+
+    setTree(update(tree));
+  };
+
+  // ---------- DRAG ----------
+  const handleDragEnd = ({ active, over }) => {
+    if (!over) return;
+
+    let dragged;
+
+    const remove = (nodes) =>
+      nodes
+        .map((n) => {
+          if (n.id === active.id) {
+            dragged = n;
+            return null;
+          }
+          return { ...n, children: remove(n.children || []) };
+        })
+        .filter(Boolean);
+
+    const insert = (nodes) =>
+      nodes.map((n) => {
+        if (n.id === over.id) {
+          return {
+            ...n,
+            children: [...n.children, dragged]
+          };
+        }
+        return { ...n, children: insert(n.children || []) };
+      });
+
+    setTree(insert(remove(tree)));
+  };
+
+  // ---------- RENDER ----------
+  const renderElement = (el) => {
+    if (el.type === "section") {
+      return (
+        <div key={el.id} style={{ border: "2px solid #aaa", marginBottom: 20 }}>
+          
+          <div style={{ padding: 10 }}>
+            <button onClick={() => addColumns(el.id, 2)}>2 Col</button>
+            <button onClick={() => addColumns(el.id, 3)}>3 Col</button>
+          </div>
+
+          <div style={{ display: "flex" }}>
+            {el.children.map((col) => (
+              <DropZone key={col.id} id={col.id}>
+                <div style={{ flex: col.width, padding: 10 }}>
+                  
+                  <button onClick={() => addElement(col.id, "text")}>Text</button>
+                  <button onClick={() => addElement(col.id, "image")}>Image</button>
+                  <button onClick={() => addElement(col.id, "button")}>Button</button>
+
+                  {col.children.map((child) => (
+                    <Draggable key={child.id} id={child.id}>
+                      <div onClick={() => setSelected(child)}>
+                        {renderElement(child)}
+                      </div>
+                    </Draggable>
+                  ))}
+                </div>
+              </DropZone>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (el.type === "text") {
+      return <div contentEditable>{el.content}</div>;
+    }
+
+    if (el.type === "image") {
+      return <img src={el.src} style={{ width: "100%" }} />;
+    }
+
+    if (el.type === "button") {
+      return <button>{el.content}</button>;
+    }
+  };
+
+  return (
+    <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <div style={{ display: "flex", height: "100%" }}>
+
+        {/* LEFT */}
+        <div style={{ width: 200, padding: 10 }}>
+          <button onClick={addSection}>Add Section</button>
+
+          <input
+            placeholder="Page name"
+            onChange={(e) => setPageId(e.target.value)}
+          />
+
+          <button onClick={savePage}>Save</button>
+          <button onClick={loadPage}>Load</button>
+        </div>
+
+        {/* CANVAS */}
+        <div style={{ flex: 1, padding: 20 }}>
+          {tree.map(renderElement)}
+        </div>
+
+      </div>
+    </DndContext>
+  );
+      }
   const addElement = (columnId, type) => {
     const update = (nodes) =>
       nodes.map((n) => {
